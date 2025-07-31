@@ -1,4 +1,3 @@
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T16:19:18.549977Z","iopub.execute_input":"2025-07-23T16:19:18.550230Z","iopub.status.idle":"2025-07-23T16:19:24.741160Z","shell.execute_reply.started":"2025-07-23T16:19:18.550210Z","shell.execute_reply":"2025-07-23T16:19:24.740428Z"},"jupyter":{"outputs_hidden":false}}
 
 import inspect
 from dataclasses import dataclass
@@ -46,7 +45,6 @@ class CausalSelfAttention(nn.Module):
 
         return y
 
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T13:16:58.716835Z","iopub.execute_input":"2025-07-23T13:16:58.717196Z","iopub.status.idle":"2025-07-23T13:16:58.721896Z","shell.execute_reply.started":"2025-07-23T13:16:58.717171Z","shell.execute_reply":"2025-07-23T13:16:58.721163Z"},"jupyter":{"outputs_hidden":false}}
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -62,7 +60,6 @@ class MLP(nn.Module):
         return x
 
 
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T13:16:58.722627Z","iopub.execute_input":"2025-07-23T13:16:58.722961Z","iopub.status.idle":"2025-07-23T13:16:58.741778Z","shell.execute_reply.started":"2025-07-23T13:16:58.722940Z","shell.execute_reply":"2025-07-23T13:16:58.741238Z"},"jupyter":{"outputs_hidden":false}}
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -77,7 +74,6 @@ class Block(nn.Module):
         return x
 
 
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T13:16:58.743298Z","iopub.execute_input":"2025-07-23T13:16:58.743549Z","iopub.status.idle":"2025-07-23T13:16:58.762494Z","shell.execute_reply.started":"2025-07-23T13:16:58.743533Z","shell.execute_reply":"2025-07-23T13:16:58.761951Z"},"jupyter":{"outputs_hidden":false}}
 @dataclass  # creates the init for gpt config class
 class GPTConfig:
     block_size: int = 1024

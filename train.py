@@ -32,25 +32,24 @@ warmup_steps = 180
 
 shard_size = 1e8
 
-model_path = "/kaggle/input/models/log" # change path to checkpoint-paths
+model_path = "/kaggle/input/models/log"  # change path to checkpoint-paths
 
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T16:19:56.882967Z","iopub.execute_input":"2025-07-23T16:19:56.883754Z","iopub.status.idle":"2025-07-23T16:19:56.900180Z","shell.execute_reply.started":"2025-07-23T16:19:56.883727Z","shell.execute_reply":"2025-07-23T16:19:56.899346Z"},"jupyter":{"outputs_hidden":false}}
 assert torch.cuda.is_available()
 ddp = int(os.environ.get('RANK', -1)) != -1
 
-if ddp and torch.cuda.device_count() > 1: # if we have more than one GPU
+if ddp and torch.cuda.device_count() > 1:  # if we have more than one GPU
     init_process_group(backend='nccl')
-    ddp_rank = int(os.environ["RANK"]) # Global rank (across multi node)
-    ddp_local_rank = int(os.environ["LOCAL_RANK"]) # Local Rank on the current node
-    ddp_world_size= int(os.environ["WORLD_SIZE"])
+    ddp_rank = int(os.environ["RANK"])  # Global rank (across multi node)
+    ddp_local_rank = int(os.environ["LOCAL_RANK"])  # Local Rank on the current node
+    ddp_world_size = int(os.environ["WORLD_SIZE"])
     device = f"cuda:{ddp_local_rank}"
     torch.cuda.set_device(device)
-    master_process = ddp_rank == 0 # flag to identify the master process, usually cuda: 0
+    master_process = ddp_rank == 0  # flag to identify the master process, usually cuda: 0
 
 else:
     ddp_rank = 0
-    ddp_local_rank = 0 # just in case of multiple nodes. (Clusters) but we only have one, with 2 GPUs.
-    ddp_world_size= 1
+    ddp_local_rank = 0  # just in case of multiple nodes. (Clusters) but we only have one, with 2 GPUs.
+    ddp_world_size = 1
     master_process = True
     device = "cpu"
     if torch.cuda.is_available():
@@ -59,9 +58,9 @@ else:
         device = "mps"
     print(f"using device: {device}")
 
-torch.manual_seed(1337) # removes CPU side randomness (e.g tensor inits)
+torch.manual_seed(1337)  # removes CPU side randomness (e.g tensor inits)
 if torch.cuda.is_available():
-    torch.cuda.manual_seed(1337) # removes GPU side randomness
+    torch.cuda.manual_seed(1337)  # removes GPU side randomness
 
 
 def load_model():
@@ -73,8 +72,8 @@ def load_model():
             print("No model checkpoint files found.")
             return model, None
 
-        latest_model_name = sorted(models)[-1] # assumes the naming convention model_XXXXX.pt for all.
-        checkpoint =  torch.load(os.path.join(model_path, latest_model_name),  weights_only=False)
+        latest_model_name = sorted(models)[-1]  # assumes the naming convention model_XXXXX.pt for all.
+        checkpoint = torch.load(os.path.join(model_path, latest_model_name), weights_only=False)
         step = checkpoint['step']
         config = checkpoint['config']
         model_weights = checkpoint['model']
@@ -101,14 +100,16 @@ model.to(device)
 
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
-raw_model = model.module if ddp else model # for the optimizer below
-
+raw_model = model.module if ddp else model  # for the optimizer below
 
 enc = tiktoken.get_encoding("gpt2")
+
+
 def load_tokens(filename):
     npt = np.load(filename)
-    ptt = torch.tensor(npt,dtype=torch.long)
+    ptt = torch.tensor(npt, dtype=torch.long)
     return ptt
+
 
 class DataLoaderLite:
     def __init__(self, B, T, rank, num_proc, split, step=0):
@@ -116,13 +117,13 @@ class DataLoaderLite:
         self.T = T
         self.rank = rank
         self.num_proc = num_proc
-        assert split in {'train','val'}
+        assert split in {'train', 'val'}
 
         # get the shards
         data_root = "/kaggle/input/fineweb-edu/edu_fineweb10b"
         shards = os.listdir(data_root)
         shards = [s for s in shards if split in s]
-        shards =  sorted(shards)
+        shards = sorted(shards)
         shards = [os.path.join(data_root, s) for s in shards]
         self.shards = shards
         assert len(shards) > 0
@@ -132,15 +133,13 @@ class DataLoaderLite:
 
         self.reset(step)
 
-
     def reset(self, step=0):
         # state, init the shard depending on check_point step.
-        self.current_shard  = int((step * total_batch_size)//(shard_size))
+        self.current_shard = int((step * total_batch_size) // (shard_size))
         self.tokens = load_tokens(self.shards[self.current_shard])
         self.current_position = self.rank * self.B * self.T
 
         print(f"Current shard: {self.current_shard}")
-
 
     def next_batch(self):
         # Get the whole line of tokens (B * T)
@@ -148,22 +147,21 @@ class DataLoaderLite:
         buf = self.tokens[self.current_position: self.current_position + (self.B * self.T) + 1]
 
         # Separate the line into batches
-        x = buf[:-1].view(self.B, self.T)   # inputs
-        y = buf[1:].view(self.B, self.T)    # targets
+        x = buf[:-1].view(self.B, self.T)  # inputs
+        y = buf[1:].view(self.B, self.T)  # targets
 
         # set start index of next batch
         self.current_position += (self.num_proc * self.B * self.T)
 
         # if the end index of next batch is beyond num of tokens then we just reset
         if self.current_position + (self.B * self.T) + 1 > len(self.tokens):
-            self.current_shard = (self.current_shard + 1) % len(self.shards)    # next shard
-            self.tokens = load_tokens(self.shards[self.current_shard])          # load next shard
-            self.current_position = self.rank * self.B * self.T                 # Reset Pos in next shard
+            self.current_shard = (self.current_shard + 1) % len(self.shards)  # next shard
+            self.tokens = load_tokens(self.shards[self.current_shard])  # load next shard
+            self.current_position = self.rank * self.B * self.T  # Reset Pos in next shard
 
         return x, y
 
 
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T13:17:07.087467Z","iopub.execute_input":"2025-07-23T13:17:07.087679Z","iopub.status.idle":"2025-07-23T13:17:07.109001Z","shell.execute_reply.started":"2025-07-23T13:17:07.087662Z","shell.execute_reply":"2025-07-23T13:17:07.108282Z"},"jupyter":{"outputs_hidden":false}}
 # Scheduler
 
 def get_lr(step):
@@ -180,10 +178,9 @@ def get_lr(step):
     return lr
 
 
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T13:17:07.109790Z","iopub.execute_input":"2025-07-23T13:17:07.110011Z","iopub.status.idle":"2025-07-23T13:17:07.127701Z","shell.execute_reply.started":"2025-07-23T13:17:07.109996Z","shell.execute_reply":"2025-07-23T13:17:07.127031Z"},"jupyter":{"outputs_hidden":false}}
 optimizer = raw_model.configure_optimizers(weight_decay=0.1, learning_rate=max_lr, betas=(0.9, 0.95), device=device)
 
-assert  total_batch_size % (B * T * ddp_world_size) == 0
+assert total_batch_size % (B * T * ddp_world_size) == 0
 grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
 
 if master_process:
@@ -193,7 +190,6 @@ if master_process:
 print(f"I am GPU: ", ddp_rank)
 train_data = DataLoaderLite(B, T, ddp_rank, ddp_world_size, split="train", step=checkpoint_step)
 val_data = DataLoaderLite(B, T, ddp_rank, ddp_world_size, split="val")
-# %% [code] {"execution":{"iopub.status.busy":"2025-07-23T13:21:38.761022Z","iopub.execute_input":"2025-07-23T13:21:38.761741Z","iopub.status.idle":"2025-07-23T13:44:54.786734Z","shell.execute_reply.started":"2025-07-23T13:21:38.761717Z","shell.execute_reply":"2025-07-23T13:44:54.785739Z"},"jupyter":{"outputs_hidden":false}}
 
 # makes matrix multiplications use tf32 or bfloat16
 # Both not available on both kaggle GPUs
@@ -243,30 +239,30 @@ while step < total_steps:
                 # rng seeds etc., if you wanted to more exactly resume training
                 torch.save(checkpoint, checkpoint_path)
 
-
     # Text Generation loop (visualization of improvement)
     if step > 0 and step % 100 == 0:
         model.eval()
         num_return_sequences = 1
         max_length = 32
         tokens = enc.encode("Hello I am a language Model")
-        tokens = torch.tensor(tokens, dtype=torch.long) # shape (T,)
-        tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1) # shape (B,T)
-        xgen = tokens.to(device) # (B,T)
-        sample_rng = torch.Generator(device=device) # set a local random number generator to get varying responses for each gpu.
+        tokens = torch.tensor(tokens, dtype=torch.long)  # shape (T,)
+        tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)  # shape (B,T)
+        xgen = tokens.to(device)  # (B,T)
+        sample_rng = torch.Generator(
+            device=device)  # set a local random number generator to get varying responses for each gpu.
         sample_rng.manual_seed(42 + ddp_rank)
         while xgen.size(1) < max_length:
             # forward the model to get the logits
-            logits, _  = model(xgen)    # (B, T, vocab_size)
-            logits = logits [:, -1, :]  # (B, vocab_size)
+            logits, _ = model(xgen)  # (B, T, vocab_size)
+            logits = logits[:, -1, :]  # (B, vocab_size)
             # Get the probs
             probs = F.softmax(logits, dim=-1)
             # do top-k sampling of 50
-            topk_probs, topk_indices = torch.topk(probs, 50, dim=-1) # (B, 50)
+            topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)  # (B, 50)
             # get the next token from the top 50 tokens
-            ix = torch.multinomial(topk_probs, 1, generator=sample_rng) # (B, 1), returns an index
+            ix = torch.multinomial(topk_probs, 1, generator=sample_rng)  # (B, 1), returns an index
             # gather the corresponding indices in vocab_size
-            xcol = torch.gather(topk_indices, dim=-1, index=ix) # (B, 1)
+            xcol = torch.gather(topk_indices, dim=-1, index=ix)  # (B, 1)
             # append the new token
             xgen = torch.cat((xgen, xcol), dim=1)
         for i in range(num_return_sequences):
@@ -287,7 +283,8 @@ while step < total_steps:
         loss = loss / grad_accum_steps
         loss_accum += loss.detach()
         if ddp:
-            model.require_backward_grad_sync = (micro_step == grad_accum_steps - 1 ) # prevents ddp syncing (with other models) with each grad accum step. (Sync only with last step)
+            model.require_backward_grad_sync = (
+                        micro_step == grad_accum_steps - 1)  # prevents ddp syncing (with other models) with each grad accum step. (Sync only with last step)
 
         # Scales the losses to prevent underflow, calls backward() creating scaled gradients.
         # Without this scaling we would get more often underflown gradients.
@@ -310,7 +307,7 @@ while step < total_steps:
     # (If we explicitly unscaled them like above then step will not unscale them again)
     # If some gradients are inf or NaN, then step makes sure
     # the parameters are not updated with the gradients.(avoid corruption)
-    scaler.step(optimizer) # updates Parameters
+    scaler.step(optimizer)  # updates Parameters
 
     # Updates the scaler for next iteration.
     scaler.update()
@@ -319,11 +316,13 @@ while step < total_steps:
 
     end = time.time()
     duration = (end - start) * 1000  # in milliseconds
-    tok_per_sec = (train_data.B * train_data.T * grad_accum_steps * ddp_world_size) / (end - start)  # tokens processed per sec
+    tok_per_sec = (train_data.B * train_data.T * grad_accum_steps * ddp_world_size) / (
+                end - start)  # tokens processed per sec
     if master_process:
-        print(f"step: {step} loss: {loss_accum.item():.4f} lr: {lr:.3e} norm:{norm:.4f} Duration: {duration:.4f} tok/sec: {tok_per_sec:.4f}")
+        print(
+            f"step: {step} loss: {loss_accum.item():.4f} lr: {lr:.3e} norm:{norm:.4f} Duration: {duration:.4f} tok/sec: {tok_per_sec:.4f}")
 
-    step +=1
+    step += 1
 
 if ddp:
     destroy_process_group()
